@@ -13,8 +13,15 @@ data Expr
     | Not Expr
     | Number Int
     | Var Identifier
-    | Plus Expr Expr
+    | BinaryOp Op Expr Expr
     deriving (Show)
+
+data Op
+  = Add
+  | Sub
+  | Mul
+  | Div
+  deriving (Eq, Show)
 
 data Value
     = NumberVal Int
@@ -101,10 +108,16 @@ eval (Not a) = do
     return $ BoolVal (not e)
 eval (Number a) = do
     return $ NumberVal a
-eval (Plus a b) = do
+eval (BinaryOp op a b) = do
     lhs <- guardNumVal =<< eval a
     rhs <- guardNumVal =<< eval b
-    return $ NumberVal (lhs + rhs)
+    case op of 
+      Add -> return $ NumberVal (lhs + rhs)
+      Sub -> return $ NumberVal (lhs - rhs)
+      Mul -> return $ NumberVal (lhs * rhs)
+      Div -> case rhs of
+        0 -> throwError "Division by zero"
+        _ -> return $ NumberVal (lhs `div` rhs)
 eval (Var ident) = readVariable ident
 
 guardMessage :: String -> String -> ErrorMsg

@@ -4,7 +4,7 @@ module Parser where
 
 import           Data.Char                      ( isDigit
                                                 , isLetter
-                                                , isSpace
+                                                , isSpace, isAlphaNum
                                                 )
 
 import           Evaluation                     ( Com
@@ -221,9 +221,10 @@ parseBool = trueParser <|> falseParser
 -- Build a parser for identifiers - string of letters and underscores
 parseIdentifier :: Parser Identifier
 parseIdentifier = do
-  result <- many1 $ satisfy "identifier" (\c -> isLetter c || c == '_')
+  firstChar <- satisfy "Beginning of an identifier" (\c -> isLetter c || c == '_')
+  result <- many $ satisfy "identifier" (\c -> isAlphaNum c || c == '_')
   _      <- spaces
-  return result
+  return $ firstChar : result
 
 parseArithExpression :: Parser Expr
 parseArithExpression = do
@@ -287,9 +288,9 @@ parseCommand :: Parser Com
 parseCommand = do
   _ <- spaces
   choice "Command statement"
-         [ assignmentParser
+         [ sequenceParser
+         , assignmentParser
          , ifThenParser
-         , sequenceParser
          , whileParser
          ]
  where
@@ -323,6 +324,10 @@ parseCommand = do
     _       <- symbol "od"
     return $ While p command
 
+-- The parser for the entire program
+programParser :: Parser Com
+programParser = parseCommand
+
 -- Helper function to run the parser on the given string
 run :: Parser a -> String -> Either ParseError a
 run p s = snd $ runState (runParser go) s
@@ -331,3 +336,6 @@ run p s = snd $ runState (runParser go) s
     result <- p
     parseEof
     return result
+
+parseProgram :: String -> Either ParseError Com
+parseProgram = run programParser

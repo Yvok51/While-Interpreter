@@ -14,6 +14,7 @@ import           Evaluation                     ( Com
                                                   , IfThen
                                                   , Seq
                                                   , While
+                                                  , Skip
                                                   )
                                                 , Expr
                                                   ( And
@@ -295,7 +296,7 @@ parseCommand = do
   _            <- spaces
   firstCommand <- startParser
   nextCommands <- many sequenceParser
-  return $ foldr Seq firstCommand nextCommands
+  return $ foldr Seq Skip (firstCommand : nextCommands)
  where
   startParser = choice 
     "Command statement"
@@ -317,6 +318,7 @@ parseCommand = do
     trueCommand  <- parseCommand
     _            <- symbol "else"
     falseCommand <- parseCommand
+    _            <- symbol "fi"
     return $ IfThen p trueCommand falseCommand
 
   sequenceParser = do
@@ -328,6 +330,7 @@ parseCommand = do
     p       <- parseBoolExpression
     _       <- symbol "do"
     command <- parseCommand
+    _       <- symbol "do"
     return $ While p command
 
 -- The parser for the entire program

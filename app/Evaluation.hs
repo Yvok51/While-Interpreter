@@ -33,6 +33,7 @@ data Com
     | IfThen Expr Com Com
     | While Expr Com
     | Seq Com Com
+    | Skip
     deriving (Show)
 
 type Environment = M.Map Identifier Value
@@ -42,8 +43,13 @@ handleUnbound = NumberVal 0
 
 newtype Interpreter a = Inter { runInterpreter :: Environment -> Either ErrorMsg (a, Environment) }
 
+emptyInterpreter :: Interpreter ()
+emptyInterpreter = Inter $ const $ Right ((), M.empty)
+
 instance Show a => Show (Interpreter a) where
-    show (Inter f) = show (f M.empty)
+    show (Inter f) = case f M.empty of
+        Left err -> err
+        Right (a, env) -> show (a, env)
 
 instance Functor Interpreter where
     fmap f inter = Inter $ \env -> case runInterpreter inter env of
@@ -111,7 +117,7 @@ eval (Number a) = do
 eval (BinaryOp op a b) = do
     lhs <- guardNumVal =<< eval a
     rhs <- guardNumVal =<< eval b
-    case op of 
+    case op of
       Add -> return $ NumberVal (lhs + rhs)
       Sub -> return $ NumberVal (lhs - rhs)
       Mul -> return $ NumberVal (lhs * rhs)
@@ -148,43 +154,49 @@ exec (While expr com) = do
         BoolVal True -> do
             exec com
             exec (While expr com)
-        BoolVal False -> return () -- TODO: seems fishy
+        BoolVal False -> return ()
         _ -> throwError "While statement requires a boolean value"
 exec (Seq comFirst comSecond) = do
     exec comFirst
     exec comSecond
+exec Skip = do
+    return ()
+
+execProgram :: Com -> Interpreter ()
+execProgram = exec
 
 -- examples
--- >>> exec (Assignment "L" (Plus (Number 2) (Number 2)))
+-- >>> exec (Assignment "L" (BinaryOp Add (Number 2) (Number 2)))
 
--- >>> exec (Seq (Assignment "L" (Plus (Number 2) (Number 2))) (Assignment "L" (Plus (Var "L") (Number 1))))
+-- >>> exec (Seq (Assignment "L" (BinaryOp Add (Number 2) (Number 2))) (Assignment "L" (BinaryOp Add (Var "L") (Number 1))))
 
 {-
 L := 2 + 2;
-If false Then
+if false Then
     L := L + 1
-Else
+else
     L := L + 2
 -}
--- >>> exec (Seq (Assignment "L" (Plus (Number 2) (Number 2))) (IfThen (Bool False) (Assignment "L" (Plus (Var "L") (Number 1))) (Assignment "L" (Plus (Var "L") (Number 2)))))
+-- >>> exec (Seq (Assignment "L" (BinaryOp Add (Number 2) (Number 2))) (IfThen (Bool False) (Assignment "L" (BinaryOp Add (Var "L") (Number 1))) (Assignment "L" (BinaryOp Add (Var "L") (Number 2)))))
 
 {-
 L := 4;
-If !(L = 4) Then
+if !(L = 4) Then
     L := L + 1
-Else
+else
     L := L + 2
 L := L + (-1)
 -}
--- >>> exec (Seq (Assignment "L" (Number 4)) (Seq (IfThen (Not (Equals (Var "L") (Number 4))) (Assignment "L" (Plus (Var "L") (Number 1))) (Assignment "L" (Plus (Var "L") (Number 2)))) (Assignment "L" (Plus (Var "L") (Number (-1))))))
+-- >>> exec (Seq (Assignment "L" (Number 4)) (Seq (IfThen (Not (Equals (Var "L") (Number 4))) (Assignment "L" (BinaryOp Add (Var "L") (Number 1))) (Assignment "L" (BinaryOp Add (Var "L") (Number 2)))) (Assignment "L" (BinaryOp Add (Var "L") (Number (-1))))))
 
 {-
 I := 1;
 Cycles := 3;
-While !(Cycles = 0) Then
+while !(Cycles = 0) do
     Cycles := Cylcles + (-1);
     I := I + 2
 -}
--- >>> exec (Seq (Assignment "I" (Number 1)) (Seq (Assignment "Cycles" (Number 3)) (While (Not (Equals (Var "Cycles") (Number 0))) (Seq (Assignment "Cycles" (Plus (Var "Cycles") (Number (-1)))) (Assignment "I" (Plus (Var "I") (Number 2)))))))
+-- >>> exec (Seq (Assignment "I" (Number 1)) (Seq (Assignment "Cycles" (Number 3)) (While (Not (Equals (Var "Cycles") (Number 0))) (Seq (Assignment "Cycles" (BinaryOp Add (Var "Cycles") (Number (-1)))) (Assignment "I" (BinaryOp Add (Var "I") (Number 2)))))))
+
 
 

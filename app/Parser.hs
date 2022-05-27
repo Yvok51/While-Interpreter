@@ -1,10 +1,12 @@
 {-# OPTIONS_GHC -Wno-unrecognised-pragmas #-}
 {-# HLINT ignore "Use tuple-section" #-}
+{-# HLINT ignore "Use <$>" #-}
 module Parser where
 
-import           Data.Char                      ( isDigit
+import           Data.Char                      ( isAlphaNum
+                                                , isDigit
                                                 , isLetter
-                                                , isSpace, isAlphaNum
+                                                , isSpace
                                                 )
 
 import           Evaluation                     ( Com
@@ -218,25 +220,30 @@ parseBool = trueParser <|> falseParser
     _ <- symbol "false"
     return False
 
--- Build a parser for identifiers - string of letters and underscores
+-- Build a parser for identifiers - string of letters, numbers and underscores
 parseIdentifier :: Parser Identifier
 parseIdentifier = do
-  firstChar <- satisfy "Beginning of an identifier" (\c -> isLetter c || c == '_')
+  firstChar <- satisfy "Beginning of an identifier"
+                       (\c -> isLetter c || c == '_')
   result <- many $ satisfy "identifier" (\c -> isAlphaNum c || c == '_')
   _      <- spaces
   return $ firstChar : result
 
+-- E ::= <integer> | <identifier> | E + E | (E)
 parseArithExpression :: Parser Expr
 parseArithExpression = do
-  _ <- spaces
-  choice
-    "Arithmetic expression"
-    [ identifierParser
-    , integerParser
-    , additionParser
-    , betweenParenthesis parseArithExpression -- TODO: maybe not ideal?
-    ]
+  _   <- spaces
+  lhs <- startParser
+  rhs <- many additionParser
+  return $ foldl (BinaryOp Add) lhs rhs
  where
+  startParser = choice
+    "Arithmetic expression"
+    [ betweenParenthesis parseArithExpression
+    , identifierParser
+    , integerParser
+    ]
+
   identifierParser :: Parser Expr
   identifierParser = do
     Var <$> parseIdentifier
@@ -247,23 +254,24 @@ parseArithExpression = do
 
   additionParser :: Parser Expr
   additionParser = do
-    lhs <- parseArithExpression
-    _   <- symbol "+"
-    rhs <- parseArithExpression
-    return $ BinaryOp Add lhs rhs
+    _ <- symbol "+"
+    startParser
 
 parseBoolExpression :: Parser Expr
 parseBoolExpression = do
-  _ <- spaces
-  choice
-    "Boolean expression"
-    [ booleanParser
-    , equalityParser
-    , conjunctionParser
-    , negationParser
-    , betweenParenthesis parseBoolExpression
-    ]
+  _   <- spaces
+  lhs <- startParser
+  rhs <- many conjunctionParser
+  return $ foldl And lhs rhs
  where
+  startParser = choice
+    "Boolean expression"
+    [ betweenParenthesis parseBoolExpression
+    , equalityParser
+    , negationParser
+    , booleanParser
+    ]
+
   booleanParser = do
     Bool <$> parseBool
 
@@ -279,21 +287,23 @@ parseBoolExpression = do
     return $ Not expr
 
   conjunctionParser = do
-    lhs <- parseBoolExpression
-    _   <- symbol "&"
-    rhs <- parseBoolExpression
-    return $ And lhs rhs
+    _ <- symbol "&"
+    startParser
 
 parseCommand :: Parser Com
 parseCommand = do
-  _ <- spaces
-  choice "Command statement"
-         [ sequenceParser
-         , assignmentParser
-         , ifThenParser
-         , whileParser
-         ]
+  _            <- spaces
+  firstCommand <- startParser
+  nextCommands <- many sequenceParser
+  return $ foldr Seq firstCommand nextCommands
  where
+  startParser = choice 
+    "Command statement"
+    [ assignmentParser
+    , ifThenParser
+    , whileParser
+    ]
+
   assignmentParser = do
     ident <- parseIdentifier
     _     <- symbol ":="
@@ -307,21 +317,17 @@ parseCommand = do
     trueCommand  <- parseCommand
     _            <- symbol "else"
     falseCommand <- parseCommand
-    _            <- symbol "fi"
     return $ IfThen p trueCommand falseCommand
 
   sequenceParser = do
-    firstCommand  <- parseCommand
-    _             <- symbol ";"
-    secondCommand <- parseCommand
-    return $ Seq firstCommand secondCommand
+    _ <- symbol ";"
+    startParser
 
   whileParser = do
     _       <- symbol "while"
     p       <- parseBoolExpression
     _       <- symbol "do"
     command <- parseCommand
-    _       <- symbol "od"
     return $ While p command
 
 -- The parser for the entire program

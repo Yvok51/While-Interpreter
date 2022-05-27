@@ -318,7 +318,7 @@ parseCommand = do
     trueCommand  <- parseCommand
     _            <- symbol "else"
     falseCommand <- parseCommand
-    _            <- symbol "fi"
+    _            <- symbol "end"
     return $ IfThen p trueCommand falseCommand
 
   sequenceParser = do
@@ -330,7 +330,7 @@ parseCommand = do
     p       <- parseBoolExpression
     _       <- symbol "do"
     command <- parseCommand
-    _       <- symbol "do"
+    _       <- symbol "end"
     return $ While p command
 
 -- The parser for the entire program

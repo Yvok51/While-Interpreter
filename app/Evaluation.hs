@@ -1,5 +1,7 @@
 module Evaluation where
 
+import qualified Data.Map as M
+
 type Identifier = String
 
 type ErrorMsg = String
@@ -26,7 +28,7 @@ data Com
     | Seq Com Com
     deriving (Show)
 
-type Environment = [(Identifier, Value)]
+type Environment = M.Map Identifier Value
 
 handleUnbound :: Value
 handleUnbound = NumberVal 0
@@ -34,7 +36,7 @@ handleUnbound = NumberVal 0
 newtype Interpreter a = Inter { runInterpreter :: Environment -> Either ErrorMsg (a, Environment) }
 
 instance Show a => Show (Interpreter a) where
-    show (Inter f) = show (f []) -- TODO: better option possible?
+    show (Inter f) = show (f M.empty)
 
 instance Functor Interpreter where
     fmap f inter = Inter $ \env -> case runInterpreter inter env of
@@ -55,9 +57,6 @@ instance Applicative Interpreter where
         a <- ma
         return (f a)
 
- -- Added so that we compile the eval function, but should never actually be used
-instance MonadFail Interpreter where
-    fail msg = Inter $ const $ Left msg
 
 get :: Interpreter Environment
 get = Inter $ \env -> Right (env, env)
@@ -65,49 +64,46 @@ get = Inter $ \env -> Right (env, env)
 set :: Environment -> Interpreter ()
 set env = Inter $ const $ Right ((), env)
 
-findVar :: Environment -> Identifier -> Maybe Value
-findVar [] _ = Nothing
-findVar ((key, val) : xs) ident | ident == key = Just val
-                                | otherwise    = findVar xs ident
-
-insertVar :: Environment -> Identifier -> Value -> Environment
-insertVar [] ident newVal = [(ident, newVal)]
-insertVar ((key, val) : xs) ident newVal
-    | key == ident = (key, newVal) : xs
-    | otherwise    = (key, val) : insertVar xs ident newVal
+throwError :: ErrorMsg -> Interpreter a
+throwError msg = Inter $ const $ Left msg
 
 readVariable :: Identifier -> Interpreter Value
-readVariable ident = Inter $ \env -> case findVar env ident of
-    Nothing -> Left
-        (  "Variable "
-        ++ ident
-        ++ " is not defined. Currently defined variables: "
-        ++ show env
-        )
-    Just val -> Right (val, env)
+readVariable ident = do
+    env <- get
+    case M.lookup ident env of
+        Nothing -> throwError
+            (  "Variable "
+            ++ ident
+            ++ " is not defined. Currently defined variables: "
+            ++ show env
+            )
+        Just val -> return val
 
 writeVariable :: Identifier -> Value -> Interpreter ()
-writeVariable ident val = Inter $ \env -> Right ((), insertVar env ident val)
+writeVariable ident val = do
+    env <- get
+    set (M.insert ident val env)
+    return ()
 
 eval :: Expr -> Interpreter Value
 eval (Bool a) = do
     return $ BoolVal a
 eval (Equals a b) = do
-    NumberVal lhs <- guardNumVal =<< eval a
-    NumberVal rhs <- guardNumVal =<< eval b
+    lhs <- guardNumVal =<< eval a
+    rhs <- guardNumVal =<< eval b
     return $ BoolVal (lhs == rhs)
 eval (And a b) = do
-    BoolVal lhs <- guardBoolVal =<< eval a
-    BoolVal rhs <- guardBoolVal =<< eval b
+    lhs <- guardBoolVal =<< eval a
+    rhs <- guardBoolVal =<< eval b
     return $ BoolVal (lhs && rhs)
 eval (Not a) = do
-    BoolVal e <- guardBoolVal =<< eval a
+    e <- guardBoolVal =<< eval a
     return $ BoolVal (not e)
 eval (Number a) = do
     return $ NumberVal a
 eval (Plus a b) = do
-    NumberVal lhs <- guardNumVal =<< eval a
-    NumberVal rhs <- guardNumVal =<< eval b
+    lhs <- guardNumVal =<< eval a
+    rhs <- guardNumVal =<< eval b
     return $ NumberVal (lhs + rhs)
 eval (Var ident) = readVariable ident
 
@@ -115,19 +111,13 @@ guardMessage :: String -> String -> ErrorMsg
 guardMessage expected encountered =
     "Expected '" <> expected <> "', but encountered '" <> encountered <> "'"
 
-{-
-guardAnyValue :: Maybe Value -> Interpreter Value
-guardAnyValue (Just v) = Inter $ \env -> Right (v, env)
-guardAnyValue Nothing = Inter $ const $ Left "Value expected, but nothing provided"
--}
+guardNumVal :: Value -> Interpreter Int
+guardNumVal (NumberVal a) = Inter $ \env -> Right (a, env)
+guardNumVal v = throwError $ guardMessage "NumberVal" $ show v
 
-guardNumVal :: Value -> Interpreter Value
-guardNumVal (NumberVal a) = Inter $ \env -> Right (NumberVal a, env)
-guardNumVal v = Inter $ const $ Left $ guardMessage "NumberVal" $ show v
-
-guardBoolVal :: Value -> Interpreter Value
-guardBoolVal (BoolVal a) = Inter $ \env -> Right (BoolVal a, env)
-guardBoolVal v = Inter $ const $ Left $ guardMessage "BoolVal" $ show v
+guardBoolVal :: Value -> Interpreter Bool
+guardBoolVal (BoolVal a) = Inter $ \env -> Right (a, env)
+guardBoolVal v = throwError $ guardMessage "BoolVal" $ show v
 
 exec :: Com -> Interpreter ()
 exec (Assignment ident expr) = do
@@ -138,7 +128,7 @@ exec (IfThen expr comTrue comFalse) = do
     case val of
         BoolVal True -> exec comTrue
         BoolVal False -> exec comFalse
-        _ -> Inter $ const $ Left "If statement requires a boolean value"
+        _ -> throwError "If statement requires a boolean value"
 exec (While expr com) = do
     val <- eval expr
     case val of
@@ -146,7 +136,7 @@ exec (While expr com) = do
             exec com
             exec (While expr com)
         BoolVal False -> return () -- TODO: seems fishy
-        _ -> Inter $ const $ Left "While statement requires a boolean value"
+        _ -> throwError "While statement requires a boolean value"
 exec (Seq comFirst comSecond) = do
     exec comFirst
     exec comSecond
@@ -183,4 +173,5 @@ While !(Cycles = 0) Then
     I := I + 2
 -}
 -- >>> exec (Seq (Assignment "I" (Number 1)) (Seq (Assignment "Cycles" (Number 3)) (While (Not (Equals (Var "Cycles") (Number 0))) (Seq (Assignment "Cycles" (Plus (Var "Cycles") (Number (-1)))) (Assignment "I" (Plus (Var "I") (Number 2)))))))
+
 

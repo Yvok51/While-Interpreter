@@ -34,15 +34,18 @@ data Com
     | While Expr Com
     | Seq Com Com
     | Skip
-    deriving (Show)
+    deriving (Eq, Show)
 
 type Environment = M.Map Identifier Value
 
 emptyEnvironment :: Environment
 emptyEnvironment = M.empty
 
-handleUnbound :: Value
-handleUnbound = NumberVal 0
+envInsert :: Identifier -> Value -> Environment -> Environment
+envInsert = M.insert
+
+envLookup :: Identifier -> Environment -> Maybe Value
+envLookup = M.lookup
 
 newtype Interpreter a = Inter { runInterpreter :: Environment -> Either ErrorMsg (a, Environment) }
 
@@ -86,7 +89,7 @@ throwError msg = Inter $ const $ Left msg
 readVariable :: Identifier -> Interpreter Value
 readVariable ident = do
     env <- get
-    case M.lookup ident env of
+    case envLookup ident env of
         Nothing -> throwError
             (  "Variable "
             ++ ident
@@ -98,7 +101,7 @@ readVariable ident = do
 writeVariable :: Identifier -> Value -> Interpreter ()
 writeVariable ident val = do
     env <- get
-    set (M.insert ident val env)
+    set (envInsert ident val env)
     return ()
 
 eval :: Expr -> Interpreter Value
@@ -150,7 +153,7 @@ exec (IfThen expr comTrue comFalse) = do
     case val of
         BoolVal True -> exec comTrue
         BoolVal False -> exec comFalse
-        _ -> throwError "If statement requires a boolean value"
+        _ -> throwError "If statement predicate requires a boolean value"
 exec (While expr com) = do
     val <- eval expr
     case val of
@@ -158,7 +161,7 @@ exec (While expr com) = do
             exec com
             exec (While expr com)
         BoolVal False -> return ()
-        _ -> throwError "While statement requires a boolean value"
+        _ -> throwError "While statement predicate requires a boolean value"
 exec (Seq comFirst comSecond) = do
     exec comFirst
     exec comSecond
@@ -200,6 +203,4 @@ while !(Cycles = 0) do
     I := I + 2
 -}
 -- >>> exec (Seq (Assignment "I" (Number 1)) (Seq (Assignment "Cycles" (Number 3)) (While (Not (Equals (Var "Cycles") (Number 0))) (Seq (Assignment "Cycles" (BinaryOp Add (Var "Cycles") (Number (-1)))) (Assignment "I" (BinaryOp Add (Var "I") (Number 2)))))))
-
-
 

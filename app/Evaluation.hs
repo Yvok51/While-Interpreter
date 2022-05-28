@@ -1,6 +1,7 @@
 module Evaluation where
 
 import qualified Data.Map as M
+import Data.Foldable (Foldable(foldl'))
 
 type Identifier = String
 
@@ -187,36 +188,69 @@ exec Skip = do
 execProgram :: Com -> Interpreter ()
 execProgram = exec
 
--- examples
--- >>> exec (Assignment "L" (BinaryOp Add (Number 2) (Number 2)))
+-- ==== Testing ====
 
--- >>> exec (Seq (Assignment "L" (BinaryOp Add (Number 2) (Number 2))) (Assignment "L" (BinaryOp Add (Var "L") (Number 1))))
+block :: [Com] -> Com
+block [] = Seq Skip Skip
+block (x : xs) = foldl' Seq x xs
 
-{-
-L := 2 + 2;
-if false Then
-    L := L + 1
-else
-    L := L + 2
--}
--- >>> exec (Seq (Assignment "L" (BinaryOp Add (Number 2) (Number 2))) (IfThen (Bool False) (Assignment "L" (BinaryOp Add (Var "L") (Number 1))) (Assignment "L" (BinaryOp Add (Var "L") (Number 2)))))
+false :: Expr
+false = Bool False
 
-{-
-L := 4;
-if !(L = 4) Then
-    L := L + 1
-else
-    L := L + 2
-L := L + (-1)
--}
--- >>> exec (Seq (Assignment "L" (Number 4)) (Seq (IfThen (Not (Equals (Var "L") (Number 4))) (Assignment "L" (BinaryOp Add (Var "L") (Number 1))) (Assignment "L" (BinaryOp Add (Var "L") (Number 2)))) (Assignment "L" (BinaryOp Add (Var "L") (Number (-1))))))
+true :: Expr
+true = Bool True 
 
-{-
-I := 1;
-Cycles := 3;
-while !(Cycles = 0) do
-    Cycles := Cylcles + (-1);
-    I := I + 2
--}
--- >>> exec (Seq (Assignment "I" (Number 1)) (Seq (Assignment "Cycles" (Number 3)) (While (Not (Equals (Var "Cycles") (Number 0))) (Seq (Assignment "Cycles" (BinaryOp Add (Var "Cycles") (Number (-1)))) (Assignment "I" (BinaryOp Add (Var "I") (Number 2)))))))
+(|=) :: Identifier -> Expr -> Com
+x |= e = Assignment x e -- := did not work :(
+
+instance Num Expr where
+    (+) = BinaryOp Add
+    (-) = BinaryOp Sub
+    (*) = BinaryOp Mul
+    fromInteger a = Number $ fromInteger a
+
+(===) :: Expr -> Expr -> Expr
+(===) = Rel Eq
+(!=) :: Expr -> Expr -> Expr
+(!=) a b = Not $ Rel Eq a b 
+
+lt :: Expr -> Expr -> Expr
+lt = Rel Lt
+gt :: Expr -> Expr -> Expr
+gt = Rel Gt
+
+-- ==== examples ====
+example1 :: Com
+example1 = block
+    [ "L" |= (2 + 1)
+    ] 
+-- >>> exec example1
+
+example2 :: Com
+example2 = block
+    [ "L" |= (2 + 2)
+    , "L" |= (Var "L" + 1)
+    ]
+-- >>> exec example2
+
+example3 :: Com
+example3 = block 
+    [ "L" |= (2 + 2)
+    , IfThen false
+        (block [ "L" |= (Var "L" + 1) ])
+        (block [ "L" |= (Var "L" + 2) ])
+    ]
+-- >>> exec example3
+
+example4 :: Com
+example4 = block
+    [ "I" |= 1
+    , "Cycles" |= 5
+    , While (Var "Cycles" != 0)
+        (block 
+        [ "Cycles" |= (Var "Cycles" - 1)
+        , "I" |= (Var "I" + Var "I")
+        ])
+    ]
+-- >>> exec example4
 

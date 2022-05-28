@@ -184,24 +184,25 @@ between left right p = do
 betweenParenthesis :: Parser a -> Parser a
 betweenParenthesis = between (symbol "(") (symbol ")")
 
--- Build a parser for a non-negative integer
-parseNonNegativeInt :: Parser Int
-parseNonNegativeInt = do
-  digits <- many1 digit
-  _      <- spaces
-  return $ read digits
+optional :: Parser a -> Parser (Maybe a)
+optional p = parser <|> nothingParser
+  where
+    nothingParser = do
+      return Nothing
+
+    parser = do
+      result <- p
+      return $ Just result
 
 -- Build a parser for an integer
 parseInteger :: Parser Int
-parseInteger = parseNonNegativeInt <|> parseNegativeInt
- where
-    -- Build a parser for a negative integer
-  parseNegativeInt :: Parser Int
-  parseNegativeInt = do
-    _      <- symbol "-"
+parseInteger = do
+    minus      <- optional $ symbol "-"
     digits <- many1 digit
     _      <- spaces
-    return $ -1 * read digits
+    case minus of
+      Nothing -> return $ read digits
+      Just _ -> return $ -1 * read digits
 
 -- combine a list of parsers together using `<|>`
 choice :: String -> [Parser a] -> Parser a

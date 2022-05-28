@@ -185,14 +185,7 @@ betweenParenthesis :: Parser a -> Parser a
 betweenParenthesis = between (symbol "(") (symbol ")")
 
 optional :: Parser a -> Parser (Maybe a)
-optional p = parser <|> nothingParser
- where
-  nothingParser = do
-    return Nothing
-
-  parser = do
-    result <- p
-    return $ Just result
+optional p = (Just <$> p) <|> return Nothing
 
 -- Build a parser for an integer
 parseInteger :: Parser Int
@@ -300,7 +293,7 @@ parseCommand = do
   return $ foldr Seq Skip (firstCommand : nextCommands)
  where
   startParser =
-    choice "Command statement" 
+    choice "Command statement"
       [ assignmentParser
       , ifThenParser
       , whileParser

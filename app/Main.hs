@@ -9,7 +9,10 @@ import           Control.Monad                  ( when
                                                 )
 
 import           Evaluation                     ( execProgram
-                                                , Interpreter
+                                                , Environment
+                                                , getEnv
+                                                , emptyEnvironment
+                                                , execProgramEnv
                                                 )
 import           Parser                         ( parseProgram )
 
@@ -24,18 +27,26 @@ eval' input = case parseProgram input of
     Left  err -> show err
     Right com -> show $ execProgram com
 
-repl :: IO ()
-repl = do
+repl :: Environment -> IO ()
+repl env = do
     line <- read'
     unless (line == ":q") $ case parseProgram line of 
-        Left err -> print err >> repl
-        Right com -> print (execProgram com) >> repl
+        Left err -> do
+            print err 
+            repl env
+        Right com -> do
+            let inter = execProgramEnv com env
+            print inter
+            let mNewEnv = getEnv inter
+            case mNewEnv of
+                Nothing -> repl env
+                Just newEnv -> repl newEnv
 
 main :: IO ()
 main = do
     args <- getArgs
     case args of
-        [] -> repl
+        [] -> repl emptyEnvironment 
         [file] -> do
             contents <- readFile file
             putStrLn $ eval' contents

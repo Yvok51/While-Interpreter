@@ -2,6 +2,7 @@ module Evaluation where
 
 import qualified Data.Map as M
 import Data.Foldable (Foldable(foldl'))
+import Data.Map (fromList)
 
 type Identifier = String
 
@@ -187,6 +188,16 @@ exec Skip = do
 
 execProgram :: Com -> Interpreter ()
 execProgram = exec
+
+execProgramEnv :: Com -> Environment -> Interpreter ()
+execProgramEnv com env = do
+    set env
+    exec com
+
+getEnv :: Interpreter () -> Maybe Environment
+getEnv (Inter f) = case f emptyEnvironment of
+    Left _ -> Nothing
+    Right ((), env) -> Just env
 
 -- ==== Testing ====
 

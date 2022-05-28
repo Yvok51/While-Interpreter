@@ -13,8 +13,8 @@ import           Evaluation                     ( Com
                                                   ( Assignment
                                                   , IfThen
                                                   , Seq
-                                                  , While
                                                   , Skip
+                                                  , While
                                                   )
                                                 , Expr
                                                   ( And
@@ -186,23 +186,23 @@ betweenParenthesis = between (symbol "(") (symbol ")")
 
 optional :: Parser a -> Parser (Maybe a)
 optional p = parser <|> nothingParser
-  where
-    nothingParser = do
-      return Nothing
+ where
+  nothingParser = do
+    return Nothing
 
-    parser = do
-      result <- p
-      return $ Just result
+  parser = do
+    result <- p
+    return $ Just result
 
 -- Build a parser for an integer
 parseInteger :: Parser Int
 parseInteger = do
-    minus      <- optional $ symbol "-"
-    digits <- many1 digit
-    _      <- spaces
-    case minus of
-      Nothing -> return $ read digits
-      Just _ -> return $ -1 * read digits
+  minus  <- optional $ symbol "-"
+  digits <- many1 digit
+  _      <- spaces
+  case minus of
+    Nothing -> return $ read digits
+    Just _  -> return $ -1 * read digits
 
 -- combine a list of parsers together using `<|>`
 choice :: String -> [Parser a] -> Parser a
@@ -299,12 +299,12 @@ parseCommand = do
   nextCommands <- many sequenceParser
   return $ foldr Seq Skip (firstCommand : nextCommands)
  where
-  startParser = choice 
-    "Command statement"
-    [ assignmentParser
-    , ifThenParser
-    , whileParser
-    ]
+  startParser =
+    choice "Command statement" 
+      [ assignmentParser
+      , ifThenParser
+      , whileParser
+      ]
 
   assignmentParser = do
     ident <- parseIdentifier
@@ -319,20 +319,24 @@ parseCommand = do
     trueCommand  <- parseCommand
     _            <- symbol "else"
     falseCommand <- parseCommand
-    _            <- symbol "end"
-    return $ IfThen p trueCommand falseCommand
+    nextCommand  <- optional startParser
+    case nextCommand of
+      Nothing  -> return $ IfThen p trueCommand falseCommand
+      Just com -> return $ Seq (IfThen p trueCommand falseCommand) com
 
   sequenceParser = do
     _ <- symbol ";"
     startParser
 
   whileParser = do
-    _       <- symbol "while"
-    p       <- parseBoolExpression
-    _       <- symbol "do"
-    command <- parseCommand
-    _       <- symbol "end"
-    return $ While p command
+    _           <- symbol "while"
+    p           <- parseBoolExpression
+    _           <- symbol "do"
+    command     <- parseCommand
+    nextCommand <- optional startParser
+    case nextCommand of
+      Nothing  -> return $ While p command
+      Just com -> return $ Seq (While p command) com
 
 -- The parser for the entire program
 programParser :: Parser Com

@@ -1,0 +1,5 @@
+I := 1;
+Power := 5;
+while !(Power = 0) do
+    I := I + I;
+    Power := Power + -1

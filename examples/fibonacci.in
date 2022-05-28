@@ -1,0 +1,9 @@
+Fib2 := 1;
+Fib1 := 0;
+n := 10;
+while !(n = 0) do
+    next := Fib1 + Fib2;
+    Fib1 := Fib2;
+    Fib2 := next;
+    n := n + -1
+

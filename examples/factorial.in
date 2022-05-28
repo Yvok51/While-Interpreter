@@ -1,0 +1,12 @@
+Factorial := 5;
+Acc := 1;
+while !(Factorial = 0) do
+    Temp := Factorial;
+    TempAcc := 0;
+    while !(Temp = 0) do
+        TempAcc := TempAcc + Acc;
+        Temp := Temp + -1
+
+    Acc := TempAcc;
+    Factorial := Factorial + -1
+

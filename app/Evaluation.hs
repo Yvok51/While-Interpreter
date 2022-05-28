@@ -220,6 +220,9 @@ instance Num Expr where
     (*) = BinaryOp Mul
     fromInteger a = Number $ fromInteger a
 
+(/) :: Expr -> Expr -> Expr
+(/) = BinaryOp Div
+
 (===) :: Expr -> Expr -> Expr
 (===) = Rel Eq
 (!=) :: Expr -> Expr -> Expr

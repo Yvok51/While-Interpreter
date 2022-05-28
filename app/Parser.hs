@@ -13,7 +13,6 @@ import           Evaluation                     ( Com
                                                   ( Assignment
                                                   , IfThen
                                                   , Seq
-                                                  , Skip
                                                   , While
                                                   )
                                                 , Expr
@@ -224,14 +223,39 @@ parseIdentifier = do
   _      <- spaces
   return $ firstChar : result
 
+parseLeftAssoc :: Parser a -> Parser (a -> a -> a) -> Parser a
+parseLeftAssoc p op = do
+    lhs <- p
+    process lhs
+  where
+    process lhs = do
+      maybeOp <- optional op
+      case maybeOp of 
+        Nothing -> return lhs
+        Just op -> do
+          rhs <- p
+          process $ op lhs rhs
+
+parseRightAssoc :: Parser a -> Parser (a -> a -> a) -> Parser a
+parseRightAssoc p op = do
+    lhs <- p
+    process lhs
+  where
+    process lhs = do
+      maybeOp <- optional op
+      case maybeOp of
+        Nothing -> return lhs
+        Just parsedOp -> do
+          rhs <- parseRightAssoc p op
+          return $ parsedOp lhs rhs
+
 -- E ::= <integer> | <identifier> | E + E | (E)
 parseArithExpression :: Parser Expr
 parseArithExpression = do
   _   <- spaces
-  lhs <- startParser
-  rhs <- many additionParser
-  return $ foldl (BinaryOp Add) lhs rhs
+  parseLeftAssoc startParser parseAddition
  where
+  startParser :: Parser Expr
   startParser = choice
     "Arithmetic expression"
     [ betweenParenthesis parseArithExpression
@@ -247,17 +271,15 @@ parseArithExpression = do
   integerParser = do
     Number <$> parseInteger
 
-  additionParser :: Parser Expr
-  additionParser = do
+  parseAddition :: Parser (Expr -> Expr -> Expr)
+  parseAddition = do
     _ <- symbol "+"
-    startParser
+    return $ BinaryOp Add
 
 parseBoolExpression :: Parser Expr
 parseBoolExpression = do
   _   <- spaces
-  lhs <- startParser
-  rhs <- many conjunctionParser
-  return $ foldl And lhs rhs
+  parseLeftAssoc startParser parseConjunction
  where
   startParser = choice
     "Boolean expression"
@@ -267,31 +289,34 @@ parseBoolExpression = do
     , booleanParser
     ]
 
+  booleanParser :: Parser Expr
   booleanParser = do
     Bool <$> parseBool
 
+  equalityParser :: Parser Expr
   equalityParser = do
     lhs <- parseArithExpression
     _   <- symbol "="
     rhs <- parseArithExpression
     return $ Equals lhs rhs
 
+  negationParser :: Parser Expr
   negationParser = do
     _    <- symbol "!"
     expr <- parseBoolExpression
     return $ Not expr
 
-  conjunctionParser = do
+  parseConjunction :: Parser (Expr -> Expr -> Expr)
+  parseConjunction = do
     _ <- symbol "&"
-    startParser
+    return And
 
 parseCommand :: Parser Com
 parseCommand = do
   _            <- spaces
-  firstCommand <- startParser
-  nextCommands <- many sequenceParser
-  return $ foldr Seq Skip (firstCommand : nextCommands)
+  parseRightAssoc startParser sequenceParser
  where
+  startParser :: Parser Com
   startParser =
     choice "Command statement"
       [ assignmentParser
@@ -299,12 +324,14 @@ parseCommand = do
       , whileParser
       ]
 
+  assignmentParser :: Parser Com
   assignmentParser = do
     ident <- parseIdentifier
     _     <- symbol ":="
     expr  <- parseArithExpression
     return $ Assignment ident expr
 
+  ifThenParser :: Parser Com
   ifThenParser = do
     _            <- symbol "if"
     p            <- parseBoolExpression
@@ -317,10 +344,7 @@ parseCommand = do
       Nothing  -> return $ IfThen p trueCommand falseCommand
       Just com -> return $ Seq (IfThen p trueCommand falseCommand) com
 
-  sequenceParser = do
-    _ <- symbol ";"
-    startParser
-
+  whileParser :: Parser Com
   whileParser = do
     _           <- symbol "while"
     p           <- parseBoolExpression
@@ -330,6 +354,11 @@ parseCommand = do
     case nextCommand of
       Nothing  -> return $ While p command
       Just com -> return $ Seq (While p command) com
+
+  sequenceParser :: Parser (Com -> Com -> Com)
+  sequenceParser = do
+    _ <- symbol ";"
+    return Seq
 
 -- The parser for the entire program
 programParser :: Parser Com
@@ -346,3 +375,4 @@ run p s = snd $ runState (runParser go) s
 
 parseProgram :: String -> Either ParseError Com
 parseProgram = run programParser
+

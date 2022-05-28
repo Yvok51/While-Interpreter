@@ -16,16 +16,18 @@ import           Evaluation                     ( Com
                                                   , While
                                                   )
                                                 , Expr
-                                                  ( And
+                                                  ( BoolBinaryOp
                                                   , BinaryOp
                                                   , Bool
-                                                  , Equals
+                                                  , Rel
                                                   , Not
                                                   , Number
                                                   , Var
                                                   )
                                                 , Identifier
-                                                , Op(Add)
+                                                , Op (Add)
+                                                , RelOp (Eq)
+                                                , BoolOp (And)
                                                 )
 
 newtype State s a = State {runState :: s -> (s, a)}
@@ -298,7 +300,7 @@ parseBoolExpression = do
     lhs <- parseArithExpression
     _   <- symbol "="
     rhs <- parseArithExpression
-    return $ Equals lhs rhs
+    return $ Rel Eq lhs rhs
 
   negationParser :: Parser Expr
   negationParser = do
@@ -309,7 +311,7 @@ parseBoolExpression = do
   parseConjunction :: Parser (Expr -> Expr -> Expr)
   parseConjunction = do
     _ <- symbol "&"
-    return And
+    return $ BoolBinaryOp And
 
 parseCommand :: Parser Com
 parseCommand = do

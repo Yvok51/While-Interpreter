@@ -8,25 +8,36 @@ type ErrorMsg = String
 
 data Expr
     = Bool Bool
-    | Equals Expr Expr
-    | And Expr Expr
+    | Rel RelOp Expr Expr
+    | BoolBinaryOp BoolOp Expr Expr
     | Not Expr
     | Number Int
     | Var Identifier
     | BinaryOp Op Expr Expr
-    deriving (Show)
+    deriving (Eq, Show)
+
+data RelOp
+    = Eq
+    | Lt
+    | Gt
+    deriving (Eq, Show)
+
+data BoolOp
+    = And
+    | Or
+    deriving (Eq, Show)
 
 data Op
-  = Add
-  | Sub
-  | Mul
-  | Div
-  deriving (Eq, Show)
+    = Add
+    | Sub
+    | Mul
+    | Div
+    deriving (Eq, Show)
 
 data Value
     = NumberVal Int
     | BoolVal Bool
-    deriving (Show)
+    deriving (Eq, Show)
 
 data Com
     = Assignment Identifier Expr
@@ -107,14 +118,19 @@ writeVariable ident val = do
 eval :: Expr -> Interpreter Value
 eval (Bool a) = do
     return $ BoolVal a
-eval (Equals a b) = do
+eval (Rel op a b) = do
     lhs <- guardNumVal =<< eval a
     rhs <- guardNumVal =<< eval b
-    return $ BoolVal (lhs == rhs)
-eval (And a b) = do
+    case op of 
+        Eq -> return $ BoolVal (lhs == rhs)
+        Lt -> return $ BoolVal (lhs < rhs)
+        Gt -> return $ BoolVal (lhs > rhs)
+eval (BoolBinaryOp op a b) = do
     lhs <- guardBoolVal =<< eval a
     rhs <- guardBoolVal =<< eval b
-    return $ BoolVal (lhs && rhs)
+    case op of
+        And -> return $ BoolVal (lhs && rhs)
+        Or -> return $ BoolVal (lhs || rhs)
 eval (Not a) = do
     e <- guardBoolVal =<< eval a
     return $ BoolVal (not e)

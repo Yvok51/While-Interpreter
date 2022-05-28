@@ -38,16 +38,19 @@ data Com
 
 type Environment = M.Map Identifier Value
 
+emptyEnvironment :: Environment
+emptyEnvironment = M.empty
+
 handleUnbound :: Value
 handleUnbound = NumberVal 0
 
 newtype Interpreter a = Inter { runInterpreter :: Environment -> Either ErrorMsg (a, Environment) }
 
 emptyInterpreter :: Interpreter ()
-emptyInterpreter = Inter $ const $ Right ((), M.empty)
+emptyInterpreter = Inter $ const $ Right ((), emptyEnvironment)
 
 instance Show a => Show (Interpreter a) where
-    show (Inter f) = case f M.empty of
+    show (Inter f) = case f emptyEnvironment of
         Left err -> err
         Right (a, env) -> show (a, env)
 
